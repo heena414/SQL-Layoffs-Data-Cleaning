@@ -1,0 +1,181 @@
+USE `CRACKNONTECH`;
+
+-- DATA CLEANING OF LAYOFFS DATASET
+
+select * FROM LAYOFFS;
+DROP TABLE LAYOFFS;
+
+-- CREATE A DUPLICATE TABLE
+
+CREATE TABLE LAYOFFS_STAGING
+select * FROM LAYOFFS;
+
+SELECT * FROM LAYOFFS_STAGING;
+
+
+-- STEPS FOR DATA CLEANING
+
+-- 1. REMOVE DUPLICATES
+-- 2. STANDARDIZE DATA
+-- 3. HANDLE NULL VALUES -> ADD DATA, DELETE USELESS ROWS
+-- 4. REMOVE COLUMNS THAT ARE NOT REQUIRED FOR THE ANALYSIS
+
+
+
+
+-- REMOVE DUPLICATES
+
+SELECT COUNT(*) FROM layoffs_staging;
+SELECT distinct COUNT(*) FROM layoffs_staging;
+
+SELECT COUNT(*) FROM (SELECT distinct * FROM layoffs_staging) AS DIS;
+SELECT COUNT(*) FROM (SELECT * FROM layoffs_staging) AS DIS;
+-- TOTAL ROWS = 2361 BUT DISTINCT ROWS = 2356, THAT MEANS WE HAVE 5 DUPLICATE ROWS
+
+-- SEE THE COLUMNS WHICH ARE DUPLICATES
+
+SELECT * FROM layoffs_staging;
+
+
+SELECT COMPANY, INDUSTRY, TOTAL_LAID_OFF, `DATE`, 
+	ROW_NUMBER() OVER(PARTITION BY COMPANY, INDUSTRY, TOTAL_LAID_OFF, `DATE`) AS ROW_NUM
+FROM layoffs_staging;
+
+
+WITH CTE AS 
+(
+	SELECT COMPANY, INDUSTRY, TOTAL_LAID_OFF, `DATE`, COUNTRY, funds_raised_millions, STAGE,
+		ROW_NUMBER() OVER(PARTITION BY COMPANY, INDUSTRY, TOTAL_LAID_OFF, `DATE`, COUNTRY, funds_raised_millions, STAGE) AS ROW_NUM
+	FROM layoffs_staging 
+)
+
+SELECT * FROM CTE
+WHERE ROW_NUM > 1;
+
+SELECT * FROM LAYOFFS WHERE COMPANY = 'Oda';
+
+CREATE TABLE LAYOFFS_DISTINCT
+SELECT distinct * FROM layoffs_staging;
+
+
+
+
+-- DATA STANDARDIZE
+
+SELECT * FROM layoffs_distinct;
+
+SELECT DISTINCT INDUSTRY FROM layoffs_distinct ORDER BY 1;
+
+-- TODO: UPDATE THESE VALUES TO STANDARD VALUE
+
+SELECT * FROM layoffs_distinct WHERE INDUSTRY LIKE 'Crypto%';
+-- DONE: UPDATE THESE VALUES TO travel
+
+SELECT * FROM layoffs_distinct WHERE COMPANY LIKE '%airbnb%';
+
+
+SELECT *
+FROM layoffs_distinct
+WHERE industry IS NULL 
+OR industry = ''
+ORDER BY industry;
+
+SELECT * FROM layoffs_distinct WHERE COMPANY LIKE '%bally%';
+
+
+UPDATE layoffs_distinct
+SET INDUSTRY = NULL
+WHERE INDUSTRY = '';
+
+
+SELECT *
+FROM layoffs_distinct
+WHERE industry IS NULL
+ORDER BY industry;
+
+
+SELECT T1.COMPANY, T1.INDUSTRY, T2.INDUSTRY
+FROM layoffs_distinct AS T1
+JOIN LAYOFFS_DISTINCT AS T2
+	ON T1.COMPANY = T2.COMPANY
+WHERE T1.INDUSTRY IS NULL
+AND T2.INDUSTRY IS NOT NULL;
+
+
+UPDATE layoffs_distinct AS T1
+JOIN LAYOFFS_DISTINCT AS T2
+	ON T1.COMPANY = T2.COMPANY
+SET T1.INDUSTRY = T2.INDUSTRY
+WHERE T1.INDUSTRY IS NULL
+AND T2.INDUSTRY IS NOT NULL;
+
+SELECT DISTINCT INDUSTRY FROM layoffs_distinct WHERE INDUSTRY LIKE 'Crypto%';
+
+UPDATE layoffs_distinct
+SET INDUSTRY = 'Crypto'
+WHERE INDUSTRY LIKE 'Crypto%';
+
+-- ANOTHER WAY: WHERE industry IN ('Crypto Currency', 'CryptoCurrency')
+
+SELECT * FROM layoffs_distinct;
+
+
+SELECT DISTINCT COUNTRY FROM layoffs_distinct ORDER BY 1;
+
+
+UPDATE layoffs_distinct
+SET COUNTRY = TRIM(TRAILING '.' FROM COUNTRY);
+
+
+SELECT `DATE`, str_to_date(`DATE`, '%m/%d/%Y')
+from layoffs_distinct;
+
+UPDATE layoffs_distinct
+SET `DATE` = str_to_date(`DATE`, '%m/%d/%Y');
+
+ALTER TABLE layoffs_distinct
+MODIFY COLUMN `DATE` DATE;
+
+
+
+
+-- DELETE USELESS ROWS
+
+SELECT * 
+FROM layoffs_distinct
+WHERE total_laid_off IS NULL
+AND percentage_laid_off IS NULL;
+
+
+DELETE
+FROM layoffs_distinct
+WHERE total_laid_off IS NULL
+AND percentage_laid_off IS NULL;
+
+
+
+
+-- DATA ANALYSIS
+
+SELECT MAX(TOTAL_LAID_OFF) FROM layoffs_distinct;
+
+SELECT * 
+FROM layoffs_distinct
+WHERE funds_raised_millions IS NOT NULL
+ORDER BY funds_raised_millions DESC;
+
+
+SELECT distinct COMPANY, funds_raised_millions 
+FROM layoffs_distinct
+WHERE funds_raised_millions IS NOT NULL
+ORDER BY funds_raised_millions DESC;
+
+SELECT LOCATION, SUM(total_laid_off) AS SUM_LAID
+FROM layoffs_distinct
+GROUP BY LOCATION
+ORDER BY SUM_LAID DESC
+LIMIT 10;
+
+
+
+
